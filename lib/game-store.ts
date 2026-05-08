@@ -38,6 +38,9 @@ interface GameStore extends GameState {
   
   // Reset
   reset: () => void;
+  
+  // Leave room
+  leaveRoom: () => void;
 }
 
 const initialState = {
@@ -119,6 +122,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setLastPollTime: (time) => set({ lastPollTime: time }),
   
   reset: () => set(initialState),
+  
+  leaveRoom: () => {
+    const { myId } = get();
+    if (myId) {
+      leaveGame(myId);
+    }
+  },
 }));
 
 // API helpers

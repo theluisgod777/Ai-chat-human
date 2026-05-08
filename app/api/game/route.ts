@@ -1,52 +1,62 @@
 import { NextResponse } from 'next/server';
+import { Redis } from '@upstash/redis';
 import type { Player, PlayerRole, Message } from '@/lib/game-types';
 import { generateId } from '@/lib/game-types';
 
-// In-memory game state (Note: in production, use Redis or a database)
-interface GameState {
-  players: Map<string, Player>;
-  messages: Message[];
-  isGameStarted: boolean;
-  typingPlayers: Set<string>;
-  lastUpdate: number;
+// Initialize Redis client
+const redis = new Redis({
+  url: process.env.KV_REST_API_URL!,
+  token: process.env.KV_REST_API_TOKEN!,
+});
+
+// Redis keys
+const GAME_KEY = 'game:state';
+const PLAYERS_KEY = 'game:players';
+const MESSAGES_KEY = 'game:messages';
+const TYPING_KEY = 'game:typing';
+
+// Player timeout in seconds
+const PLAYER_TIMEOUT = 15;
+
+interface PlayerWithLastSeen extends Player {
+  lastSeen: number;
 }
 
-// Global state
-const gameState: GameState = {
-  players: new Map(),
-  messages: [],
-  isGameStarted: false,
-  typingPlayers: new Set(),
-  lastUpdate: Date.now(),
-};
-
-// Clean up disconnected players (older than 10 seconds without activity)
-function cleanupPlayers() {
+// Clean up disconnected players
+async function cleanupPlayers(): Promise<void> {
   const now = Date.now();
-  const TIMEOUT = 10000; // 10 seconds
+  const players = await redis.hgetall<Record<string, PlayerWithLastSeen>>(PLAYERS_KEY) || {};
   
-  for (const [id, player] of gameState.players) {
-    if (now - (player as Player & { lastSeen?: number }).lastSeen! > TIMEOUT) {
-      gameState.players.delete(id);
-      gameState.typingPlayers.delete(id);
+  for (const [id, player] of Object.entries(players)) {
+    if (player && now - player.lastSeen > PLAYER_TIMEOUT * 1000) {
+      await redis.hdel(PLAYERS_KEY, id);
+      await redis.srem(TYPING_KEY, id);
     }
   }
   
-  // Reset game if not enough players
-  if (gameState.players.size < 2) {
-    gameState.isGameStarted = false;
+  // Check player count after cleanup
+  const remainingPlayers = await redis.hlen(PLAYERS_KEY);
+  if (remainingPlayers < 2) {
+    await redis.set(GAME_KEY, JSON.stringify({ isGameStarted: false, lastUpdate: now }));
   }
 }
 
-function getNextRole(): PlayerRole {
-  cleanupPlayers();
-  const players = Array.from(gameState.players.values());
-  const hasUser = players.some(p => p.role === 'USER');
-  const hasAI = players.some(p => p.role === 'AI');
+async function getNextRole(): Promise<PlayerRole> {
+  await cleanupPlayers();
+  const players = await redis.hgetall<Record<string, PlayerWithLastSeen>>(PLAYERS_KEY) || {};
+  const playerList = Object.values(players);
+  
+  const hasUser = playerList.some(p => p?.role === 'USER');
+  const hasAI = playerList.some(p => p?.role === 'AI');
   
   if (!hasUser) return 'USER';
   if (!hasAI) return 'AI';
   return null;
+}
+
+async function getGameState(): Promise<{ isGameStarted: boolean; lastUpdate: number }> {
+  const state = await redis.get<{ isGameStarted: boolean; lastUpdate: number }>(GAME_KEY);
+  return state || { isGameStarted: false, lastUpdate: Date.now() };
 }
 
 // GET: Poll for game state updates
@@ -55,35 +65,39 @@ export async function GET(request: Request) {
   const playerId = searchParams.get('playerId');
   const since = parseInt(searchParams.get('since') || '0', 10);
   
-  cleanupPlayers();
+  await cleanupPlayers();
   
   // Update player's last seen time
-  if (playerId && gameState.players.has(playerId)) {
-    const player = gameState.players.get(playerId)!;
-    (player as Player & { lastSeen: number }).lastSeen = Date.now();
-  }
-  
-  // Get opponent's typing status
-  let isOpponentTyping = false;
   if (playerId) {
-    for (const typingId of gameState.typingPlayers) {
-      if (typingId !== playerId) {
-        isOpponentTyping = true;
-        break;
-      }
+    const player = await redis.hget<PlayerWithLastSeen>(PLAYERS_KEY, playerId);
+    if (player) {
+      player.lastSeen = Date.now();
+      await redis.hset(PLAYERS_KEY, { [playerId]: player });
     }
   }
   
-  // Only return messages since the last poll
-  const newMessages = gameState.messages.filter(m => m.timestamp > since);
+  // Get all players
+  const players = await redis.hgetall<Record<string, PlayerWithLastSeen>>(PLAYERS_KEY) || {};
+  const playerList = Object.values(players).filter(Boolean).map(({ id, name, role, isConnected }) => ({
+    id,
+    name,
+    role,
+    isConnected,
+  }));
+  
+  // Get typing players
+  const typingPlayers = await redis.smembers(TYPING_KEY) || [];
+  const isOpponentTyping = playerId ? typingPlayers.some(id => id !== playerId) : false;
+  
+  // Get messages since last poll
+  const allMessages = await redis.lrange<Message>(MESSAGES_KEY, 0, -1) || [];
+  const newMessages = allMessages.filter(m => m && m.timestamp > since);
+  
+  // Get game state
+  const gameState = await getGameState();
   
   return NextResponse.json({
-    players: Array.from(gameState.players.values()).map(({ id, name, role, isConnected }) => ({
-      id,
-      name,
-      role,
-      isConnected,
-    })),
+    players: playerList,
     messages: newMessages,
     isGameStarted: gameState.isGameStarted,
     isOpponentTyping,
@@ -96,51 +110,65 @@ export async function POST(request: Request) {
   const body = await request.json();
   const { action, playerId, name, content } = body;
   
-  cleanupPlayers();
+  await cleanupPlayers();
   
   switch (action) {
     case 'join': {
-      const role = getNextRole();
+      const role = await getNextRole();
       if (!role) {
         return NextResponse.json({ error: 'Game is full' }, { status: 400 });
       }
       
       const id = generateId();
-      const player: Player & { lastSeen: number } = {
+      const player: PlayerWithLastSeen = {
         id,
-        name: name || `Player ${gameState.players.size + 1}`,
+        name: name || `Player ${(await redis.hlen(PLAYERS_KEY)) + 1}`,
         role,
         isConnected: true,
         lastSeen: Date.now(),
       };
       
-      gameState.players.set(id, player);
-      gameState.lastUpdate = Date.now();
+      await redis.hset(PLAYERS_KEY, { [id]: player });
       
       // Check if game can start
-      if (gameState.players.size === 2 && !gameState.isGameStarted) {
-        gameState.isGameStarted = true;
+      const playerCount = await redis.hlen(PLAYERS_KEY);
+      const gameState = await getGameState();
+      
+      if (playerCount === 2 && !gameState.isGameStarted) {
+        await redis.set(GAME_KEY, JSON.stringify({ 
+          isGameStarted: true, 
+          lastUpdate: Date.now() 
+        }));
       }
+      
+      // Get updated state
+      const updatedState = await getGameState();
+      const players = await redis.hgetall<Record<string, PlayerWithLastSeen>>(PLAYERS_KEY) || {};
+      const playerList = Object.values(players).filter(Boolean).map(({ id, name, role, isConnected }) => ({
+        id,
+        name,
+        role,
+        isConnected,
+      }));
       
       return NextResponse.json({
         playerId: id,
         role,
-        players: Array.from(gameState.players.values()).map(({ id, name, role, isConnected }) => ({
-          id,
-          name,
-          role,
-          isConnected,
-        })),
-        isGameStarted: gameState.isGameStarted,
+        players: playerList,
+        isGameStarted: updatedState.isGameStarted,
       });
     }
     
     case 'message': {
-      if (!playerId || !gameState.players.has(playerId)) {
+      if (!playerId) {
         return NextResponse.json({ error: 'Not in game' }, { status: 400 });
       }
       
-      const player = gameState.players.get(playerId)!;
+      const player = await redis.hget<PlayerWithLastSeen>(PLAYERS_KEY, playerId);
+      if (!player) {
+        return NextResponse.json({ error: 'Not in game' }, { status: 400 });
+      }
+      
       const message: Message = {
         id: generateId(),
         content: content || '',
@@ -148,56 +176,68 @@ export async function POST(request: Request) {
         timestamp: Date.now(),
       };
       
-      gameState.messages.push(message);
-      gameState.lastUpdate = Date.now();
-      
-      // Stop typing
-      gameState.typingPlayers.delete(playerId);
+      // Add message to list (prepend for easier retrieval)
+      await redis.rpush(MESSAGES_KEY, message);
       
       // Keep only last 100 messages
-      if (gameState.messages.length > 100) {
-        gameState.messages = gameState.messages.slice(-100);
+      const messageCount = await redis.llen(MESSAGES_KEY);
+      if (messageCount > 100) {
+        await redis.ltrim(MESSAGES_KEY, -100, -1);
       }
+      
+      // Stop typing
+      await redis.srem(TYPING_KEY, playerId);
+      
+      // Update last update time
+      await redis.set(GAME_KEY, JSON.stringify({ 
+        ...(await getGameState()),
+        lastUpdate: Date.now() 
+      }));
       
       return NextResponse.json({ success: true, message });
     }
     
     case 'typing': {
-      if (playerId && gameState.players.has(playerId)) {
-        gameState.typingPlayers.add(playerId);
-        gameState.lastUpdate = Date.now();
+      if (playerId) {
+        await redis.sadd(TYPING_KEY, playerId);
+        // Auto-expire typing status after 5 seconds
+        await redis.expire(TYPING_KEY, 5);
       }
       return NextResponse.json({ success: true });
     }
     
     case 'stopTyping': {
       if (playerId) {
-        gameState.typingPlayers.delete(playerId);
-        gameState.lastUpdate = Date.now();
+        await redis.srem(TYPING_KEY, playerId);
       }
       return NextResponse.json({ success: true });
     }
     
     case 'leave': {
       if (playerId) {
-        gameState.players.delete(playerId);
-        gameState.typingPlayers.delete(playerId);
-        gameState.lastUpdate = Date.now();
+        await redis.hdel(PLAYERS_KEY, playerId);
+        await redis.srem(TYPING_KEY, playerId);
         
-        if (gameState.players.size < 2) {
-          gameState.isGameStarted = false;
+        const playerCount = await redis.hlen(PLAYERS_KEY);
+        if (playerCount < 2) {
+          await redis.set(GAME_KEY, JSON.stringify({ 
+            isGameStarted: false, 
+            lastUpdate: Date.now() 
+          }));
         }
       }
       return NextResponse.json({ success: true });
     }
     
     case 'reset': {
-      // Reset game state (for testing)
-      gameState.players.clear();
-      gameState.messages = [];
-      gameState.isGameStarted = false;
-      gameState.typingPlayers.clear();
-      gameState.lastUpdate = Date.now();
+      // Reset game state completely
+      await redis.del(PLAYERS_KEY);
+      await redis.del(MESSAGES_KEY);
+      await redis.del(TYPING_KEY);
+      await redis.set(GAME_KEY, JSON.stringify({ 
+        isGameStarted: false, 
+        lastUpdate: Date.now() 
+      }));
       return NextResponse.json({ success: true });
     }
     
