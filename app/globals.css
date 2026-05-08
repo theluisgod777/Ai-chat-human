@@ -1,0 +1,303 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Cyberpunk Neon Colors */
+  --neon-cyan: oklch(0.85 0.18 192);
+  --neon-magenta: oklch(0.65 0.28 330);
+  --neon-blue: oklch(0.55 0.22 255);
+  --neon-green: oklch(0.75 0.2 145);
+  --neon-orange: oklch(0.75 0.2 50);
+  
+  /* Core Theme */
+  --background: oklch(0.08 0.015 270);
+  --foreground: oklch(0.95 0.01 192);
+  --card: oklch(0.12 0.02 270);
+  --card-foreground: oklch(0.95 0.01 192);
+  --popover: oklch(0.1 0.02 270);
+  --popover-foreground: oklch(0.95 0.01 192);
+  
+  /* Primary = Cyan */
+  --primary: oklch(0.85 0.18 192);
+  --primary-foreground: oklch(0.08 0.015 270);
+  
+  /* Secondary = Magenta */
+  --secondary: oklch(0.65 0.28 330);
+  --secondary-foreground: oklch(0.95 0.01 192);
+  
+  /* Muted */
+  --muted: oklch(0.16 0.02 270);
+  --muted-foreground: oklch(0.6 0.02 192);
+  
+  /* Accent = Electric Blue */
+  --accent: oklch(0.55 0.22 255);
+  --accent-foreground: oklch(0.95 0.01 192);
+  
+  /* Destructive */
+  --destructive: oklch(0.6 0.25 25);
+  --destructive-foreground: oklch(0.95 0.01 192);
+  
+  /* UI Elements */
+  --border: oklch(0.25 0.04 270);
+  --input: oklch(0.14 0.02 270);
+  --ring: oklch(0.85 0.18 192);
+  
+  /* Charts */
+  --chart-1: oklch(0.85 0.18 192);
+  --chart-2: oklch(0.65 0.28 330);
+  --chart-3: oklch(0.55 0.22 255);
+  --chart-4: oklch(0.75 0.2 145);
+  --chart-5: oklch(0.75 0.2 50);
+  
+  --radius: 0.5rem;
+  
+  /* Sidebar */
+  --sidebar: oklch(0.1 0.02 270);
+  --sidebar-foreground: oklch(0.95 0.01 192);
+  --sidebar-primary: oklch(0.85 0.18 192);
+  --sidebar-primary-foreground: oklch(0.08 0.015 270);
+  --sidebar-accent: oklch(0.16 0.02 270);
+  --sidebar-accent-foreground: oklch(0.95 0.01 192);
+  --sidebar-border: oklch(0.25 0.04 270);
+  --sidebar-ring: oklch(0.85 0.18 192);
+}
+
+@theme inline {
+  --font-sans: 'Geist', 'Geist Fallback', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', 'Geist Mono Fallback', monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  
+  /* Custom Cyberpunk Colors */
+  --color-neon-cyan: var(--neon-cyan);
+  --color-neon-magenta: var(--neon-magenta);
+  --color-neon-blue: var(--neon-blue);
+  --color-neon-green: var(--neon-green);
+  --color-neon-orange: var(--neon-orange);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Cyberpunk Animations */
+@keyframes glow-pulse {
+  0%, 100% { 
+    opacity: 1;
+    filter: brightness(1);
+  }
+  50% { 
+    opacity: 0.8;
+    filter: brightness(1.2);
+  }
+}
+
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+@keyframes glitch {
+  0%, 100% { 
+    transform: translate(0);
+    filter: hue-rotate(0deg);
+  }
+  10% { 
+    transform: translate(-2px, 1px);
+    filter: hue-rotate(90deg);
+  }
+  20% { 
+    transform: translate(2px, -1px);
+    filter: hue-rotate(-90deg);
+  }
+  30% { 
+    transform: translate(-1px, 2px);
+  }
+  40% { 
+    transform: translate(1px, -2px);
+  }
+  50% { 
+    transform: translate(-2px, -1px);
+    filter: hue-rotate(180deg);
+  }
+  60% { 
+    transform: translate(2px, 1px);
+  }
+  70% { 
+    transform: translate(-1px, -2px);
+    filter: hue-rotate(-180deg);
+  }
+  80% { 
+    transform: translate(1px, 2px);
+  }
+  90% { 
+    transform: translate(-2px, 1px);
+    filter: hue-rotate(90deg);
+  }
+}
+
+@keyframes typing-cursor {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes particle-float {
+  0% { 
+    transform: translateY(100vh) scale(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% { 
+    transform: translateY(-10vh) scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes border-glow {
+  0%, 100% { 
+    box-shadow: 0 0 5px var(--neon-cyan), 0 0 10px var(--neon-cyan), 0 0 15px var(--neon-cyan);
+  }
+  50% { 
+    box-shadow: 0 0 10px var(--neon-cyan), 0 0 20px var(--neon-cyan), 0 0 30px var(--neon-cyan);
+  }
+}
+
+/* Utility Classes */
+.glow-cyan {
+  text-shadow: 0 0 10px var(--neon-cyan), 0 0 20px var(--neon-cyan), 0 0 40px var(--neon-cyan);
+}
+
+.glow-magenta {
+  text-shadow: 0 0 10px var(--neon-magenta), 0 0 20px var(--neon-magenta), 0 0 40px var(--neon-magenta);
+}
+
+.glow-blue {
+  text-shadow: 0 0 10px var(--neon-blue), 0 0 20px var(--neon-blue), 0 0 40px var(--neon-blue);
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+.animate-glitch {
+  animation: glitch 0.5s ease-in-out infinite;
+}
+
+.animate-typing-cursor {
+  animation: typing-cursor 1s step-end infinite;
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-border-glow {
+  animation: border-glow 2s ease-in-out infinite;
+}
+
+/* Scanline overlay */
+.scanlines::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.1) 2px,
+    rgba(0, 0, 0, 0.1) 4px
+  );
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* Neon border classes */
+.neon-border-cyan {
+  border: 1px solid var(--neon-cyan);
+  box-shadow: 0 0 5px var(--neon-cyan), inset 0 0 5px rgba(0, 240, 255, 0.1);
+}
+
+.neon-border-magenta {
+  border: 1px solid var(--neon-magenta);
+  box-shadow: 0 0 5px var(--neon-magenta), inset 0 0 5px rgba(255, 0, 255, 0.1);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--muted);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--neon-cyan);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--neon-magenta);
+}
+
+/* Terminal text effect */
+.terminal-text {
+  font-family: var(--font-mono);
+  letter-spacing: 0.05em;
+}
